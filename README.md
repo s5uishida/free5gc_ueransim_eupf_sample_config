@@ -1,1 +1,970 @@
-# free5gc_ueransim_eupf_sample_config
+# free5GC 5GC & UERANSIM UE / RAN Sample Configuration - eUPF(eBPF/XDP UPF)
+This describes a simple configuration for working free5GC and eUPF(eBPF/XDP UPF).
+In particular, see [here](https://github.com/s5uishida/install_eupf) for eUPF.
+
+---
+
+<a id="conf_list"></a>
+
+## List of Sample Configurations
+
+1. [One SMF, one UPF and one DNN](https://github.com/s5uishida/free5gc_srsran_sample_config)
+2. [One SMF, Multiple UPFs and DNNs](https://github.com/s5uishida/free5gc_ueransim_sample_config)
+3. [Select nearby UPF according to the connected gNodeB](https://github.com/s5uishida/free5gc_ueransim_nearby_upf_sample_config)
+4. [Select UPF based on S-NSSAI](https://github.com/s5uishida/free5gc_ueransim_snssai_upf_sample_config)
+5. [ULCL(Uplink Classifier)](https://github.com/s5uishida/free5gc_ueransim_ulcl_sample_config)
+6. [ULCL with one I-UPF and two PSA-UPFs](https://github.com/s5uishida/free5gc_ueransim_ulcl_2_sample_config)
+7. [VPP-UPF with DPDK](https://github.com/s5uishida/free5gc_ueransim_vpp_upf_dpdk_sample_config)
+8. eUPF(eBPF/XDP UPF) (this article)
+
+---
+
+<a id="misc"></a>
+
+## Miscellaneous Notes
+
+- [Install MongoDB 6.0 and free5GC WebUI](https://github.com/s5uishida/free5gc_install_mongodb6_webui)
+- [Install MongoDB 4.4.18 on Ubuntu 20.04 for Raspberry Pi 4B](https://github.com/s5uishida/install_mongodb_on_ubuntu_for_rp4b)
+- [A Note for 5G SUCI Profile A/B Scheme](https://github.com/s5uishida/note_5g_suci_profile_ab)
+- [A Note for Enabling NetworkInstance IE Encoding for free5GC v3.3.0](https://github.com/s5uishida/enable_network_instance_encoding_free5gc_v3_3_0)
+- [Install eUPF(eBPF/XDP UPF) on Host](https://github.com/s5uishida/install_eupf)
+
+---
+
+<a id="toc"></a>
+
+## Table of Contents
+
+- [Overview of free5GC 5GC Simulation Mobile Network](#overview)
+- [Changes in configuration files of free5GC 5GC, eUPF and UERANSIM UE / RAN](#changes)
+  - [Changes in configuration files of free5GC 5GC C-Plane](#changes_cp)
+  - [Changes in configuration files of eUPF](#changes_up)
+  - [Changes in configuration files of UERANSIM UE / RAN](#changes_ueransim)
+    - [Changes in configuration files of RAN](#changes_ran)
+    - [Changes in configuration files of UE (IMSI-001010000000000)](#changes_ue)
+- [Network settings of free5GC 5GC, eUPF and UERANSIM UE / RAN](#network_settings)
+  - [Network settings of eUPF and Data Network Gateway](#network_settings_up)
+- [Build free5GC, eUPF and UERANSIM](#build)
+- [Run free5GC 5GC, eUPF and UERANSIM UE / RAN](#run)
+  - [Run eUPF](#run_up)
+  - [Run free5GC 5GC C-Plane](#run_cp)
+  - [Run UERANSIM](#run_ueran)
+    - [Start gNB](#start_gnb)
+    - [Start UE](#start_ue)
+- [Ping google.com](#ping)
+  - [Case for going through DN 10.60.0.0/16](#ping_1)
+- [Changelog (summary)](#changelog)
+
+---
+
+<a id="overview"></a>
+
+## Overview of free5GC 5GC Simulation Mobile Network
+
+This describes a simple configuration of C-Plane, eBPF/XDP UPF and Data Network Gateway for free5GC.
+**Note that this configuration is implemented with Virtualbox VMs.**
+
+The following minimum configuration was set as a condition.
+- One UPF and Data Network Gateway
+- One UE and one DNN
+
+The built simulation environment is as follows.
+
+<img src="./images/network-overview.png" title="./images/network-overview.png" width=1000px></img>
+
+The 5GC / eBPF/XDP UPF / UE / RAN used are as follows.
+- 5GC - free5GC v3.3.0 (2023.10.28) - https://github.com/free5gc/free5gc
+- eBPF/XDP UPF - eUPF v0.5.1 (2023.10.28) - https://github.com/edgecomllc/eupf
+- UE / RAN - UERANSIM v3.2.6 (2023.06.14) - https://github.com/aligungr/UERANSIM
+
+Each VMs are as follows.  
+| VM | SW & Role | IP address | OS | CPU<br>(Min) | Memory<br>(Min) | HDD<br>(Min) |
+| --- | --- | --- | --- | --- | --- | --- |
+| VM1 | free5GC 5GC C-Plane | 192.168.0.141/24 | Ubuntu 22.04 | 1 | 2GB | 20GB |
+| VM-UP | eUPF U-Plane | 192.168.0.151/24 | Ubuntu 22.04 | 1 | 2GB | 20GB |
+| VM-DN | Data Network Gateway  | 192.168.0.152/24 | Ubuntu 22.04 | 1 | 1GB | 10GB |
+| VM2 | UERANSIM RAN (gNodeB) | 192.168.0.131/24 | Ubuntu 22.04 | 1 | 1GB | 10GB |
+| VM3 | UERANSIM UE | 192.168.0.132/24 | Ubuntu 22.04 | 1 | 1GB | 10GB |
+
+The network interfaces of each VM are as follows.
+| VM | Device | Network Adapter | IP address | Interface | XDP |
+| --- | --- | --- | --- | --- | --- |
+| VM1 | enp0s3 | NAT(default) | 10.0.2.15/24 | (VM default NW) | -- |
+| | enp0s8 | Bridged Adapter | 192.168.0.141/24 | (Mgmt NW) | -- |
+| | enp0s9 | NAT Network | 192.168.14.141/24 | N4 | -- |
+| VM-UP | ~~enp0s3~~ | ~~NAT(default)~~ | ~~10.0.2.15/24~~ | ~~(VM default NW)~~ ***down*** | -- |
+| | enp0s8 | Bridged Adapter | 192.168.0.151/24 | (Mgmt NW) | -- |
+| | enp0s9 | NAT Network | 192.168.13.151/24 | N3 | x |
+| | enp0s10 | NAT Network | 192.168.14.151/24 | N4 | -- |
+| | enp0s16 | NAT Network | 192.168.16.151/24 | N6 | x |
+| VM-DN | enp0s3 | NAT(default) | 10.0.2.15/24 | (VM default NW) | -- |
+| | enp0s8 | Bridged Adapter | 192.168.0.152/24 | (Mgmt NW) | -- |
+| | enp0s9 | NAT Network | 192.168.16.152/24 | N6, ***default GW for VM-UP*** | -- |
+| VM2 | enp0s3 | NAT(default) | 10.0.2.15/24 | (VM default NW) | -- |
+| | enp0s8 | Bridged Adapter | 192.168.0.131/24 | (Mgmt NW) | -- |
+| | enp0s9 | NAT Network | 192.168.13.131/24 | N3 | -- |
+| VM3 | enp0s3 | NAT(default) | 10.0.2.15/24 | (VM default NW) | -- |
+| | enp0s8 | Bridged Adapter | 192.168.0.132/24 | (Mgmt NW) | -- |
+
+NAT networks of Virtualbox  are as follows.
+| Network Name | Network CIDR |
+| --- | --- |
+| N3 | 192.168.13.0/24 |
+| N4 | 192.168.14.0/24 |
+| N6 | 192.168.16.0/24 |
+
+
+Subscriber Information (other information is the same) is as follows.  
+**Note. Please select OP or OPc according to the setting of UERANSIM UE configuration file.**
+| UE | IMSI | DNN | OP/OPc |
+| --- | --- | --- | --- |
+| UE | 001010000000000 | internet | OPc |
+
+I registered these information with the free5GC WebUI.
+In addition, [3GPP TS 35.208](https://www.3gpp.org/DynaReport/35208.htm) "4.3 Test Sets" is published by 3GPP as test data for the 3GPP authentication and key generation functions (MILENAGE).
+
+The DN is as follows.
+| DN | DNN | TUNnel interface of UE |
+| --- | --- | --- |
+| 10.60.0.0/16 | internet | uesimtun0 |
+
+<a id="changes"></a>
+
+## Changes in configuration files of free5GC 5GC, eUPF and UERANSIM UE / RAN
+
+Please refer to the following for building free5GC, eUPF and UERANSIM respectively.
+- free5GC v3.3.0 (2023.10.28) - https://free5gc.org/guide/
+- eUPF v0.5.1 (2023.10.28) - https://github.com/s5uishida/install_eupf
+- UERANSIM v3.2.6 (2023.06.14) - https://github.com/aligungr/UERANSIM/wiki/Installation
+
+<a id="changes_cp"></a>
+
+### Changes in configuration files of free5GC 5GC C-Plane
+
+The combination of DNN and S-NSSAI parameters can be used in the logic that selects UPF as the connection destination by PFCP.
+
+- DNN
+- S-NSSAI
+
+For the sake of simplicity, This time, only DNN will be changed. S-NSSAI of all UEs is fixed as `SST=1` and `SD=010203`.
+
+- `free5gc/config/amfcfg.yaml`
+```diff
+--- amfcfg.yaml.orig    2023-10-28 22:09:20.479542560 +0900
++++ amfcfg.yaml 2023-10-28 22:16:28.358460658 +0900
+@@ -5,7 +5,7 @@
+ configuration:
+   amfName: AMF # the name of this AMF
+   ngapIpList:  # the IP list of N2 interfaces on this AMF
+-    - 127.0.0.18
++    - 192.168.0.141
+   ngapPort: 38412 # the SCTP port listened by NGAP
+   sbi: # Service-based interface information
+     scheme: http # the protocol for sbi (http or https)
+@@ -24,18 +24,18 @@
+   servedGuamiList: # Guami (Globally Unique AMF ID) list supported by this AMF
+     # <GUAMI> = <MCC><MNC><AMF ID>
+     - plmnId: # Public Land Mobile Network ID, <PLMN ID> = <MCC><MNC>
+-        mcc: 208 # Mobile Country Code (3 digits string, digit: 0~9)
+-        mnc: 93 # Mobile Network Code (2 or 3 digits string, digit: 0~9)
++        mcc: 001 # Mobile Country Code (3 digits string, digit: 0~9)
++        mnc: 01 # Mobile Network Code (2 or 3 digits string, digit: 0~9)
+       amfId: cafe00 # AMF identifier (3 bytes hex string, range: 000000~FFFFFF)
+   supportTaiList:  # the TAI (Tracking Area Identifier) list supported by this AMF
+     - plmnId: # Public Land Mobile Network ID, <PLMN ID> = <MCC><MNC>
+-        mcc: 208 # Mobile Country Code (3 digits string, digit: 0~9)
+-        mnc: 93 # Mobile Network Code (2 or 3 digits string, digit: 0~9)
++        mcc: 001 # Mobile Country Code (3 digits string, digit: 0~9)
++        mnc: 01 # Mobile Network Code (2 or 3 digits string, digit: 0~9)
+       tac: 000001 # Tracking Area Code (3 bytes hex string, range: 000000~FFFFFF)
+   plmnSupportList: # the PLMNs (Public land mobile network) list supported by this AMF
+     - plmnId: # Public Land Mobile Network ID, <PLMN ID> = <MCC><MNC>
+-        mcc: 208 # Mobile Country Code (3 digits string, digit: 0~9)
+-        mnc: 93 # Mobile Network Code (2 or 3 digits string, digit: 0~9)
++        mcc: 001 # Mobile Country Code (3 digits string, digit: 0~9)
++        mnc: 01 # Mobile Network Code (2 or 3 digits string, digit: 0~9)
+       snssaiList: # the S-NSSAI (Single Network Slice Selection Assistance Information) list supported by this AMF
+         - sst: 1 # Slice/Service Type (uinteger, range: 0~255)
+           sd: 010203 # Slice Differentiator (3 bytes hex string, range: 000000~FFFFFF)
+```
+- `free5gc/config/ausfcfg.yaml`
+```diff
+--- ausfcfg.yaml.orig   2023-10-28 22:09:20.479542560 +0900
++++ ausfcfg.yaml        2023-10-28 22:16:35.947533214 +0900
+@@ -15,8 +15,8 @@
+     - nausf-auth # Nausf_UEAuthentication service
+   nrfUri: http://127.0.0.10:8000 # a valid URI of NRF
+   plmnSupportList: # the PLMNs (Public Land Mobile Network) list supported by this AUSF
+-    - mcc: 208 # Mobile Country Code (3 digits string, digit: 0~9)
+-      mnc: 93  # Mobile Network Code (2 or 3 digits string, digit: 0~9)
++    - mcc: 001 # Mobile Country Code (3 digits string, digit: 0~9)
++      mnc: 01  # Mobile Network Code (2 or 3 digits string, digit: 0~9)
+     - mcc: 123 # Mobile Country Code (3 digits string, digit: 0~9)
+       mnc: 45  # Mobile Network Code (2 or 3 digits string, digit: 0~9)
+   groupId: ausfGroup001 # ID for the group of the AUSF
+```
+- `free5gc/config/nrfcfg.yaml`
+```diff
+--- nrfcfg.yaml.orig    2023-10-28 22:09:20.480542536 +0900
++++ nrfcfg.yaml 2023-10-28 22:16:42.051592773 +0900
+@@ -14,8 +14,8 @@
+       pem: cert/nrf.pem # NRF TLS Certificate
+       key: cert/nrf.key # NRF TLS Private key
+   DefaultPlmnId:
+-    mcc: 208 # Mobile Country Code (3 digits string, digit: 0~9)
+-    mnc: 93 # Mobile Network Code (2 or 3 digits string, digit: 0~9)
++    mcc: 001 # Mobile Country Code (3 digits string, digit: 0~9)
++    mnc: 01 # Mobile Network Code (2 or 3 digits string, digit: 0~9)
+   serviceNameList: # the SBI services provided by this NRF, refer to TS 29.510
+     - nnrf-nfm # Nnrf_NFManagement service
+     - nnrf-disc # Nnrf_NFDiscovery service
+```
+- `free5gc/config/nssfcfg.yaml`
+```diff
+--- nssfcfg.yaml.orig   2023-10-28 22:09:20.480542536 +0900
++++ nssfcfg.yaml        2023-10-28 22:16:46.708638917 +0900
+@@ -17,12 +17,12 @@
+     - nnssf-nssaiavailability # Nnssf_NSSAIAvailability service
+   nrfUri: http://127.0.0.10:8000 # a valid URI of NRF
+   supportedPlmnList: # the PLMNs (Public land mobile network) list supported by this NSSF
+-    - mcc: 208 # Mobile Country Code (3 digits string, digit: 0~9)
+-      mnc: 93 # Mobile Network Code (2 or 3 digits string, digit: 0~9)
++    - mcc: 001 # Mobile Country Code (3 digits string, digit: 0~9)
++      mnc: 01 # Mobile Network Code (2 or 3 digits string, digit: 0~9)
+   supportedNssaiInPlmnList: # Supported S-NSSAI List for each PLMN
+     - plmnId: # Public Land Mobile Network ID, <PLMN ID> = <MCC><MNC>
+-        mcc: 208 # Mobile Country Code (3 digits string, digit: 0~9)
+-        mnc: 93 # Mobile Network Code (2 or 3 digits string, digit: 0~9)
++        mcc: 001 # Mobile Country Code (3 digits string, digit: 0~9)
++        mnc: 01 # Mobile Network Code (2 or 3 digits string, digit: 0~9)
+       supportedSnssaiList: # Supported S-NSSAIs of the PLMN
+         - sst: 1 # Slice/Service Type (uinteger, range: 0~255)
+           sd: 010203 # Slice Differentiator (3 bytes hex string, range: 000000~FFFFFF)
+```
+- `free5gc/config/smfcfg.yaml`
+```diff
+--- smfcfg.yaml.orig    2023-10-28 22:09:20.480542536 +0900
++++ smfcfg.yaml 2023-10-28 22:16:51.996692030 +0900
+@@ -34,22 +34,22 @@
+             ipv4: 8.8.8.8
+             ipv6: 2001:4860:4860::8888
+   plmnList: # the list of PLMN IDs that this SMF belongs to (optional, remove this key when unnecessary)
+-    - mcc: 208 # Mobile Country Code (3 digits string, digit: 0~9)
+-      mnc: 93 # Mobile Network Code (2 or 3 digits string, digit: 0~9)
++    - mcc: 001 # Mobile Country Code (3 digits string, digit: 0~9)
++      mnc: 01 # Mobile Network Code (2 or 3 digits string, digit: 0~9)
+   locality: area1 # Name of the location where a set of AMF, SMF, PCF and UPFs are located
+   pfcp: # the IP address of N4 interface on this SMF (PFCP)
+     # addr config is deprecated in smf config v1.0.3, please use the following config
+-    nodeID: 127.0.0.1 # the Node ID of this SMF
+-    listenAddr: 127.0.0.1 # the IP/FQDN of N4 interface on this SMF (PFCP)
+-    externalAddr: 127.0.0.1 # the IP/FQDN of N4 interface on this SMF (PFCP)
++    nodeID: 192.168.14.141 # the Node ID of this SMF
++    listenAddr: 192.168.14.141 # the IP/FQDN of N4 interface on this SMF (PFCP)
++    externalAddr: 192.168.14.141 # the IP/FQDN of N4 interface on this SMF (PFCP)
+   userplaneInformation: # list of userplane information
+     upNodes: # information of userplane node (AN or UPF)
+       gNB1: # the name of the node
+         type: AN # the type of the node (AN or UPF)
+       UPF: # the name of the node
+         type: UPF # the type of the node (AN or UPF)
+-        nodeID: 127.0.0.8 # the Node ID of this UPF
+-        addr: 127.0.0.8 # the IP/FQDN of N4 interface on this UPF (PFCP)
++        nodeID: 192.168.14.151 # the Node ID of this UPF
++        addr: 192.168.14.151 # the IP/FQDN of N4 interface on this UPF (PFCP)
+         sNssaiUpfInfos: # S-NSSAI information list for this UPF
+           - sNssai: # S-NSSAI (Single Network Slice Selection Assistance Information)
+               sst: 1 # Slice/Service Type (uinteger, range: 0~255)
+@@ -72,7 +72,7 @@
+         interfaces: # Interface list for this UPF
+           - interfaceType: N3 # the type of the interface (N3 or N9)
+             endpoints: # the IP address of this N3/N9 interface on this UPF
+-              - 127.0.0.8
++              - 192.168.13.151
+             networkInstances:  # Data Network Name (DNN)
+               - internet
+     links: # the topology graph of userplane, A and B represent the two nodes of each link
+@@ -89,8 +89,10 @@
+     expireTime: 16s   # default is 6 seconds
+     maxRetryTimes: 3 # the max number of retransmission
+   nrfUri: http://127.0.0.10:8000 # a valid URI of NRF
+-  #urrPeriod: 10 # default usage report period in seconds
+-  #urrThreshold: 1000 # default usage report threshold in bytes
++  urrPeriod: 10 # default usage report period in seconds
++  urrThreshold: 1000 # default usage report threshold in bytes
++  ulcl: false
++  nwInstFqdnEncoding: true
+ 
+ logger: # log output setting
+   enable: true # true or false
+```
+
+
+<a id="changes_up"></a>
+
+### Changes in configuration files of eUPF
+
+See [here](https://github.com/s5uishida/install_eupf#create-configuration-file) for the original file.
+
+- `eupf/config.yml`  
+There is no change.
+
+<a id="changes_ueransim"></a>
+
+### Changes in configuration files of UERANSIM UE / RAN
+
+<a id="changes_ran"></a>
+
+#### Changes in configuration files of RAN
+
+- `UERANSIM/config/free5gc-gnb.yaml`
+```diff
+--- free5gc-gnb.yaml.orig       2021-02-12 09:47:56.000000000 +0900
++++ free5gc-gnb.yaml    2023-06-15 22:24:00.297158446 +0900
+@@ -1,17 +1,17 @@
+-mcc: '208'          # Mobile Country Code value
+-mnc: '93'           # Mobile Network Code value (2 or 3 digits)
++mcc: '001'          # Mobile Country Code value
++mnc: '01'           # Mobile Network Code value (2 or 3 digits)
+ 
+ nci: '0x000000010'  # NR Cell Identity (36-bit)
+ idLength: 32        # NR gNB ID length in bits [22...32]
+ tac: 1              # Tracking Area Code
+ 
+-linkIp: 127.0.0.1   # gNB's local IP address for Radio Link Simulation (Usually same with local IP)
+-ngapIp: 127.0.0.1   # gNB's local IP address for N2 Interface (Usually same with local IP)
+-gtpIp: 127.0.0.1    # gNB's local IP address for N3 Interface (Usually same with local IP)
++linkIp: 192.168.0.131   # gNB's local IP address for Radio Link Simulation (Usually same with local IP)
++ngapIp: 192.168.0.131   # gNB's local IP address for N2 Interface (Usually same with local IP)
++gtpIp: 192.168.13.131    # gNB's local IP address for N3 Interface (Usually same with local IP)
+ 
+ # List of AMF address information
+ amfConfigs:
+-  - address: 127.0.0.1
++  - address: 192.168.0.141
+     port: 38412
+ 
+ # List of supported S-NSSAIs by this gNB
+```
+
+<a id="changes_ue"></a>
+
+#### Changes in configuration files of UE (IMSI-001010000000000)
+
+- `UERANSIM/config/free5gc-ue.yaml`
+```diff
+--- free5gc-ue.yaml.orig        2023-05-10 14:51:54.000000000 +0900
++++ free5gc-ue.yaml     2023-06-15 22:24:48.016816988 +0900
+@@ -1,9 +1,9 @@
+ # IMSI number of the UE. IMSI = [MCC|MNC|MSISDN] (In total 15 digits)
+-supi: 'imsi-208930000000003'
++supi: 'imsi-001010000000000'
+ # Mobile Country Code value of HPLMN
+-mcc: '208'
++mcc: '001'
+ # Mobile Network Code value of HPLMN (2 or 3 digits)
+-mnc: '93'
++mnc: '01'
+ # SUCI Protection Scheme : 0 for Null-scheme, 1 for Profile A and 2 for Profile B
+ protectionScheme: 0
+ # Home Network Public Key for protecting with SUCI Profile A
+@@ -28,7 +28,7 @@
+ 
+ # List of gNB IP addresses for Radio Link Simulation
+ gnbSearchList:
+-  - 127.0.0.1
++  - 192.168.0.131
+ 
+ # UAC Access Identities Configuration
+ uacAic:
+```
+
+<a id="network_settings"></a>
+
+## Network settings of free5GC 5GC, eUPF and UERANSIM UE / RAN
+
+<a id="network_settings_up"></a>
+
+### Network settings of eUPF and Data Network Gateway
+
+See [this1](https://github.com/s5uishida/install_eupf#setup-eupf-on-vm-up) and [this2](https://github.com/s5uishida/install_eupf#setup-data-network-gateway-on-vm-dn).
+
+<a id="build"></a>
+
+## Build free5GC, eUPF and UERANSIM
+
+Please refer to the following for building free5GC, eUPF and UERANSIM respectively.
+- free5GC v3.3.0 (2023.10.28) - https://free5gc.org/guide/
+- eUPF v0.5.1 (2023.10.28) - https://github.com/s5uishida/install_eupf
+- UERANSIM v3.2.6 (2023.06.14) - https://github.com/aligungr/UERANSIM/wiki/Installation
+
+Install MongoDB on free5GC 5GC C-Plane machine.
+[MongoDB Compass](https://www.mongodb.com/products/compass) is a convenient tool to look at the MongoDB database.
+
+**Note. The installation guide also includes instructions on building the latest committed version.**
+
+<a id="run"></a>
+
+## Run free5GC 5GC, eUPF and UERANSIM UE / RAN
+
+First run eUPF, then the 5GC and UERANSIM (UE & RAN implementation).
+
+<a id="run_up"></a>
+
+### Run eUPF
+
+See [this](https://github.com/s5uishida/install_eupf#run-eupf-on-vm-up).
+
+<a id="run_cp"></a>
+
+### Run free5GC 5GC C-Plane
+
+Next, run free5GC 5GC C-Plane.
+Create the following shell script and run it.
+```bash
+#!/usr/bin/env bash
+
+PID_LIST=()
+
+NF_LIST="nrf amf smf udr pcf udm nssf ausf chf"
+
+export GIN_MODE=release
+
+for NF in ${NF_LIST}; do
+    ./bin/${NF} &
+    PID_LIST+=($!)
+    sleep 1
+done
+
+function terminate()
+{
+    sudo kill -SIGTERM ${PID_LIST[${#PID_LIST[@]}-2]} ${PID_LIST[${#PID_LIST[@]}-1]}
+    sleep 2
+}
+
+trap terminate SIGINT
+wait ${PID_LIST}
+```
+The PFCP association log between eUPF and free5GC SMF is as follows.
+```
+2023/10/29 11:53:29 INF Received 30 bytes from 192.168.14.141:8805
+2023/10/29 11:53:29 INF Handling PFCP message from 192.168.14.141:8805
+2023/10/29 11:53:29 INF Got Association Setup Request from: 192.168.14.141. 
+
+2023/10/29 11:53:29 INF 
+Association Setup Request:
+  Node ID: 192.168.14.141
+  Recovery Time: 2023-10-29 11:53:29 +0900 JST
+
+2023/10/29 11:53:29 INF Saving new association: &{ID:192.168.14.141 Addr:192.168.14.141 NextSessionID:1 NextSequenceID:1 Sessions:map[] HeartbeatRetries:0 cancelRetries:<nil>}
+```
+
+<a id="run_ueran"></a>
+
+### Run UERANSIM
+
+Here, the case of UE (IMSI-001010000000000) & RAN is described.
+First, do an NG Setup between gNodeB and 5GC, then register the UE with 5GC and establish a PDU session.
+
+Please refer to the following for usage of UERANSIM.
+
+https://github.com/aligungr/UERANSIM/wiki/Usage
+
+
+<a id="start_gnb"></a>
+
+#### Start gNB
+
+Start gNB as follows.
+```
+# ./nr-gnb -c ../config/free5gc-gnb.yaml
+UERANSIM v3.2.6
+[2023-10-29 11:53:41.345] [sctp] [info] Trying to establish SCTP connection... (192.168.0.141:38412)
+[2023-10-29 11:53:41.347] [sctp] [info] SCTP connection established (192.168.0.141:38412)
+[2023-10-29 11:53:41.348] [sctp] [debug] SCTP association setup ascId[14]
+[2023-10-29 11:53:41.348] [ngap] [debug] Sending NG Setup Request
+[2023-10-29 11:53:41.350] [ngap] [debug] NG Setup Response received
+[2023-10-29 11:53:41.350] [ngap] [info] NG Setup procedure is successful
+```
+The free5GC C-Plane log when executed is as follows.
+```
+2023-10-29T11:53:41.350218468+09:00 [INFO][AMF][Ngap] [AMF] SCTP Accept from: 192.168.0.131:56520
+2023-10-29T11:53:41.350876025+09:00 [INFO][AMF][Ngap] Create a new NG connection for: 192.168.0.131:56520
+2023-10-29T11:53:41.351497876+09:00 [INFO][AMF][Ngap][ran_addr:192.168.0.131:56520] Handle NGSetupRequest
+2023-10-29T11:53:41.351977485+09:00 [INFO][AMF][Ngap][ran_addr:192.168.0.131:56520] Send NG-Setup response
+```
+
+<a id="start_ue"></a>
+
+#### Start UE
+
+Start UE as follows. This will register the UE with 5GC and establish a PDU session.
+```
+# ./nr-ue -c ../config/free5gc-ue.yaml
+UERANSIM v3.2.6
+[2023-10-29 11:54:13.659] [nas] [info] UE switches to state [MM-DEREGISTERED/PLMN-SEARCH]
+[2023-10-29 11:54:13.659] [rrc] [debug] New signal detected for cell[1], total [1] cells in coverage
+[2023-10-29 11:54:13.660] [nas] [info] Selected plmn[001/01]
+[2023-10-29 11:54:13.660] [rrc] [info] Selected cell plmn[001/01] tac[1] category[SUITABLE]
+[2023-10-29 11:54:13.660] [nas] [info] UE switches to state [MM-DEREGISTERED/PS]
+[2023-10-29 11:54:13.661] [nas] [info] UE switches to state [MM-DEREGISTERED/NORMAL-SERVICE]
+[2023-10-29 11:54:13.661] [nas] [debug] Initial registration required due to [MM-DEREG-NORMAL-SERVICE]
+[2023-10-29 11:54:13.663] [nas] [debug] UAC access attempt is allowed for identity[0], category[MO_sig]
+[2023-10-29 11:54:13.663] [nas] [debug] Sending Initial Registration
+[2023-10-29 11:54:13.664] [rrc] [debug] Sending RRC Setup Request
+[2023-10-29 11:54:13.664] [nas] [info] UE switches to state [MM-REGISTER-INITIATED]
+[2023-10-29 11:54:13.665] [rrc] [info] RRC connection established
+[2023-10-29 11:54:13.665] [rrc] [info] UE switches to state [RRC-CONNECTED]
+[2023-10-29 11:54:13.665] [nas] [info] UE switches to state [CM-CONNECTED]
+[2023-10-29 11:54:13.688] [nas] [debug] Authentication Request received
+[2023-10-29 11:54:13.696] [nas] [debug] Security Mode Command received
+[2023-10-29 11:54:13.696] [nas] [debug] Selected integrity[2] ciphering[0]
+[2023-10-29 11:54:13.735] [nas] [debug] Registration accept received
+[2023-10-29 11:54:13.735] [nas] [info] UE switches to state [MM-REGISTERED/NORMAL-SERVICE]
+[2023-10-29 11:54:13.735] [nas] [debug] Sending Registration Complete
+[2023-10-29 11:54:13.735] [nas] [info] Initial Registration is successful
+[2023-10-29 11:54:13.735] [nas] [debug] Sending PDU Session Establishment Request
+[2023-10-29 11:54:13.736] [nas] [debug] UAC access attempt is allowed for identity[0], category[MO_sig]
+[2023-10-29 11:54:13.946] [nas] [debug] Configuration Update Command received
+[2023-10-29 11:54:14.058] [nas] [debug] PDU Session Establishment Accept received
+[2023-10-29 11:54:14.063] [nas] [info] PDU Session establishment is successful PSI[1]
+[2023-10-29 11:54:14.089] [app] [info] Connection setup for PDU session[1] is successful, TUN interface[uesimtun0, 10.60.0.1] is up.
+```
+The free5GC C-Plane log when executed is as follows.
+```
+2023-10-29T11:54:13.664794186+09:00 [INFO][AMF][Ngap][ran_addr:192.168.0.131:56520] Handle InitialUEMessage
+2023-10-29T11:54:13.665083268+09:00 [INFO][AMF][Ngap][amf_ue_ngap_id:RU:1,AU:1(3GPP)][ran_addr:192.168.0.131:56520] New RanUe [RanUeNgapID:1][AmfUeNgapID:1]
+2023-10-29T11:54:13.665267535+09:00 [INFO][AMF][Ngap][ran_addr:192.168.0.131:56520] 5GSMobileIdentity ["SUCI":"suci-0-001-01-0000-0-0-0000000000", err: <nil>]
+2023-10-29T11:54:13.665989815+09:00 [INFO][AMF][CTX] New AmfUe [supi:][guti:00101cafe0000000001]
+2023-10-29T11:54:13.666186096+09:00 [INFO][AMF][Gmm] Handle event[Gmm Message], transition from [Deregistered] to [Deregistered]
+2023-10-29T11:54:13.666373701+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:] Handle Registration Request
+2023-10-29T11:54:13.666516353+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:] RegistrationType: Initial Registration
+2023-10-29T11:54:13.666696179+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:] MobileIdentity5GS: SUCI[suci-0-001-01-0000-0-0-0000000000]
+2023-10-29T11:54:13.666842794+09:00 [INFO][AMF][Gmm] Handle event[Start Authentication], transition from [Deregistered] to [Authentication]
+2023-10-29T11:54:13.667014523+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:] Authentication procedure
+2023-10-29T11:54:13.667805141+09:00 [INFO][NRF][DISC] Handle NFDiscoveryRequest
+2023-10-29T11:54:13.668768053+09:00 [INFO][NRF][GIN] | 200 |       127.0.0.1 | GET     | /nnrf-disc/v1/nf-instances?requester-nf-type=AMF&target-nf-type=AUSF |
+2023-10-29T11:54:13.670282380+09:00 [INFO][AUSF][UeAuth] HandleUeAuthPostRequest
+2023-10-29T11:54:13.670460975+09:00 [INFO][AUSF][UeAuth] Serving network authorized
+2023-10-29T11:54:13.671176533+09:00 [INFO][NRF][DISC] Handle NFDiscoveryRequest
+2023-10-29T11:54:13.672370845+09:00 [INFO][NRF][GIN] | 200 |       127.0.0.1 | GET     | /nnrf-disc/v1/nf-instances?requester-nf-type=AUSF&service-names=nudm-ueau&target-nf-type=UDM |
+2023-10-29T11:54:13.673540512+09:00 [INFO][UDM][UEAU] Handle GenerateAuthDataRequest
+2023-10-29T11:54:13.673945887+09:00 [INFO][UDM][Suci] suciPart: [suci 0 001 01 0000 0 0 0000000000]
+2023-10-29T11:54:13.674160287+09:00 [INFO][UDM][Suci] scheme 0
+2023-10-29T11:54:13.674303534+09:00 [INFO][UDM][Suci] SUPI type is IMSI
+http://127.0.0.10:8000
+2023-10-29T11:54:13.676172957+09:00 [INFO][NRF][DISC] Handle NFDiscoveryRequest
+2023-10-29T11:54:13.677236355+09:00 [INFO][NRF][GIN] | 200 |       127.0.0.1 | GET     | /nnrf-disc/v1/nf-instances?requester-nf-type=UDM&target-nf-type=UDR |
+2023-10-29T11:54:13.678236787+09:00 [INFO][UDR][DataRepo] Handle QueryAuthSubsData
+2023-10-29T11:54:13.679783753+09:00 [INFO][UDR][GIN] | 200 |       127.0.0.1 | GET     | /nudr-dr/v1/subscription-data/imsi-001010000000000/authentication-data/authentication-subscription |
+2023-10-29T11:54:13.680634039+09:00 [INFO][UDM][UEAU] Nil Op
+2023-10-29T11:54:13.681172453+09:00 [INFO][UDR][DataRepo] Handle ModifyAuthentication
+2023-10-29T11:54:13.682877434+09:00 [INFO][UDR][GIN] | 204 |       127.0.0.1 | PATCH   | /nudr-dr/v1/subscription-data/imsi-001010000000000/authentication-data/authentication-subscription |
+2023-10-29T11:54:13.683358410+09:00 [INFO][UDM][GIN] | 200 |       127.0.0.1 | POST    | /nudm-ueau/v1/suci-0-001-01-0000-0-0-0000000000/security-information/generate-auth-data |
+2023-10-29T11:54:13.683755831+09:00 [INFO][AUSF][UeAuth] Add SuciSupiPair (suci-0-001-01-0000-0-0-0000000000, imsi-001010000000000) to map.
+2023-10-29T11:54:13.684000133+09:00 [INFO][AUSF][UeAuth] Use 5G AKA auth method
+2023-10-29T11:54:13.684238587+09:00 [INFO][AUSF][5gAka] XresStar = 3564653738666535623836353163373964656539306431363332306437346430
+2023-10-29T11:54:13.684453794+09:00 [INFO][AUSF][GIN] | 201 |       127.0.0.1 | POST    | /nausf-auth/v1/ue-authentications |
+2023-10-29T11:54:13.685201378+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:] Send Authentication Request
+2023-10-29T11:54:13.685398932+09:00 [INFO][AMF][Ngap][amf_ue_ngap_id:RU:1,AU:1(3GPP)][ran_addr:192.168.0.131:56520] Send Downlink Nas Transport
+2023-10-29T11:54:13.686098591+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:] Start T3560 timer
+2023-10-29T11:54:13.687426890+09:00 [INFO][AMF][Ngap][ran_addr:192.168.0.131:56520] Handle UplinkNASTransport
+2023-10-29T11:54:13.687593014+09:00 [INFO][AMF][Ngap][amf_ue_ngap_id:RU:1,AU:1(3GPP)][ran_addr:192.168.0.131:56520] Handle UplinkNASTransport (RAN UE NGAP ID: 1)
+2023-10-29T11:54:13.687775071+09:00 [INFO][AMF][Gmm] Handle event[Gmm Message], transition from [Authentication] to [Authentication]
+2023-10-29T11:54:13.687984762+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:] Handle Authentication Response
+2023-10-29T11:54:13.688163650+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:] Stop T3560 timer
+2023-10-29T11:54:13.688924913+09:00 [INFO][AUSF][5gAka] Auth5gAkaComfirmRequest
+2023-10-29T11:54:13.689229449+09:00 [INFO][AUSF][5gAka] res*: 3564653738666535623836353163373964656539306431363332306437346430
+Xres*: 3564653738666535623836353163373964656539306431363332306437346430
+2023-10-29T11:54:13.689684351+09:00 [INFO][AUSF][5gAka] 5G AKA confirmation succeeded
+2023-10-29T11:54:13.690436776+09:00 [INFO][UDM][UEAU] Handle ConfirmAuthDataRequest
+2023-10-29T11:54:13.691338803+09:00 [INFO][UDR][DataRepo] Handle CreateAuthenticationStatus
+2023-10-29T11:54:13.692225662+09:00 [INFO][UDR][GIN] | 204 |       127.0.0.1 | PUT     | /nudr-dr/v1/subscription-data/imsi-001010000000000/authentication-data/authentication-status |
+2023-10-29T11:54:13.692729107+09:00 [INFO][UDM][GIN] | 201 |       127.0.0.1 | POST    | /nudm-ueau/v1/imsi-001010000000000/auth-events |
+2023-10-29T11:54:13.693163170+09:00 [INFO][AUSF][GIN] | 200 |       127.0.0.1 | PUT     | /nausf-auth/v1/ue-authentications/suci-0-001-01-0000-0-0-0000000000/5g-aka-confirmation |
+2023-10-29T11:54:13.693663399+09:00 [INFO][AMF][Gmm] Handle event[Authentication Success], transition from [Authentication] to [SecurityMode]
+2023-10-29T11:54:13.693984203+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:imsi-001010000000000] Send Security Mode Command
+2023-10-29T11:54:13.694175223+09:00 [INFO][AMF][Ngap][amf_ue_ngap_id:RU:1,AU:1(3GPP)][ran_addr:192.168.0.131:56520] Send Downlink Nas Transport
+2023-10-29T11:54:13.694773111+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:imsi-001010000000000] Start T3560 timer
+2023-10-29T11:54:13.696159516+09:00 [INFO][AMF][Ngap][ran_addr:192.168.0.131:56520] Handle UplinkNASTransport
+2023-10-29T11:54:13.696319167+09:00 [INFO][AMF][Ngap][amf_ue_ngap_id:RU:1,AU:1(3GPP)][ran_addr:192.168.0.131:56520] Handle UplinkNASTransport (RAN UE NGAP ID: 1)
+2023-10-29T11:54:13.696502640+09:00 [INFO][AMF][Gmm] Handle event[Gmm Message], transition from [SecurityMode] to [SecurityMode]
+2023-10-29T11:54:13.696686045+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:imsi-001010000000000] Handle Security Mode Complete
+2023-10-29T11:54:13.696830699+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:imsi-001010000000000] Stop T3560 timer
+2023-10-29T11:54:13.697058017+09:00 [INFO][AMF][Gmm] Handle event[SecurityMode Success], transition from [SecurityMode] to [ContextSetup]
+2023-10-29T11:54:13.697202244+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:imsi-001010000000000] Handle InitialRegistration
+2023-10-29T11:54:13.697906912+09:00 [INFO][NRF][DISC] Handle NFDiscoveryRequest
+2023-10-29T11:54:13.699248280+09:00 [INFO][NRF][GIN] | 200 |       127.0.0.1 | GET     | /nnrf-disc/v1/nf-instances?requester-nf-type=AMF&supi=imsi-001010000000000&target-nf-type=UDM |
+2023-10-29T11:54:13.700337912+09:00 [INFO][UDM][SDM] Handle GetNssai
+2023-10-29T11:54:13.700917555+09:00 [INFO][UDR][DataRepo] Handle QueryAmData
+2023-10-29T11:54:13.701684539+09:00 [INFO][UDR][GIN] | 200 |       127.0.0.1 | GET     | /nudr-dr/v1/subscription-data/imsi-001010000000000/00101/provisioned-data/am-data |
+2023-10-29T11:54:13.702148743+09:00 [INFO][UDM][GIN] | 200 |       127.0.0.1 | GET     | /nudm-sdm/v1/imsi-001010000000000/nssai?plmn-id=%7B%22mcc%22%3A%22001%22%2C%22mnc%22%3A%2201%22%7D |
+2023-10-29T11:54:13.702638293+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:imsi-001010000000000] RequestedNssai - ServingSnssai: &{Sst:1 Sd:010203}, HomeSnssai: <nil>
+2023-10-29T11:54:13.703356061+09:00 [INFO][NRF][DISC] Handle NFDiscoveryRequest
+2023-10-29T11:54:13.704535178+09:00 [INFO][NRF][GIN] | 200 |       127.0.0.1 | GET     | /nnrf-disc/v1/nf-instances?requester-nf-type=AMF&supi=imsi-001010000000000&target-nf-type=UDM |
+2023-10-29T11:54:13.705800288+09:00 [INFO][UDM][UECM] Handle RegistrationAmf3gppAccess
+2023-10-29T11:54:13.706128211+09:00 [INFO][UDM][UECM] UEID: imsi-001010000000000
+2023-10-29T11:54:13.706847552+09:00 [INFO][UDR][DataRepo] Handle CreateAmfContext3gpp
+2023-10-29T11:54:13.708008080+09:00 [INFO][UDR][GIN] | 204 |       127.0.0.1 | PUT     | /nudr-dr/v1/subscription-data/imsi-001010000000000/context-data/amf-3gpp-access |
+2023-10-29T11:54:13.708577322+09:00 [INFO][UDM][GIN] | 201 |       127.0.0.1 | PUT     | /nudm-uecm/v1/imsi-001010000000000/registrations/amf-3gpp-access |
+2023-10-29T11:54:13.709122940+09:00 [INFO][UDM][SDM] Handle GetAmData
+2023-10-29T11:54:13.709497946+09:00 [INFO][UDR][DataRepo] Handle QueryAmData
+2023-10-29T11:54:13.710186675+09:00 [INFO][UDR][GIN] | 200 |       127.0.0.1 | GET     | /nudr-dr/v1/subscription-data/imsi-001010000000000/00101/provisioned-data/am-data?supported-features=%7B%22mcc%22%3A%22001%22%2C%22mnc%22%3A%2201%22%7D |
+2023-10-29T11:54:13.710547288+09:00 [INFO][UDM][GIN] | 200 |       127.0.0.1 | GET     | /nudm-sdm/v1/imsi-001010000000000/am-data?plmn-id=%7B%22mcc%22%3A%22001%22%2C%22mnc%22%3A%2201%22%7D |
+2023-10-29T11:54:13.711208216+09:00 [INFO][UDM][SDM] Handle GetSmfSelectData
+2023-10-29T11:54:13.711723217+09:00 [INFO][UDR][DataRepo] Handle QuerySmfSelectData
+2023-10-29T11:54:13.712407072+09:00 [INFO][UDR][GIN] | 200 |       127.0.0.1 | GET     | /nudr-dr/v1/subscription-data/imsi-001010000000000/00101/provisioned-data/smf-selection-subscription-data |
+2023-10-29T11:54:13.712912119+09:00 [INFO][UDM][GIN] | 200 |       127.0.0.1 | GET     | /nudm-sdm/v1/imsi-001010000000000/smf-select-data?plmn-id=%7B%22mcc%22%3A%22001%22%2C%22mnc%22%3A%2201%22%7D |
+2023-10-29T11:54:13.713498208+09:00 [INFO][UDM][SDM] Handle GetUeContextInSmfData
+2023-10-29T11:54:13.713819579+09:00 [INFO][UDR][DataRepo] Handle QuerySmfRegList
+2023-10-29T11:54:13.714494813+09:00 [INFO][UDR][GIN] | 200 |       127.0.0.1 | GET     | /nudr-dr/v1/subscription-data/imsi-001010000000000/context-data/smf-registrations |
+2023-10-29T11:54:13.714947178+09:00 [INFO][UDM][GIN] | 200 |       127.0.0.1 | GET     | /nudm-sdm/v1/imsi-001010000000000/ue-context-in-smf-data |
+2023-10-29T11:54:13.715758961+09:00 [INFO][UDM][SDM] Handle Subscribe
+2023-10-29T11:54:13.716327640+09:00 [INFO][UDR][DataRepo] Handle CreateSdmSubscriptions
+2023-10-29T11:54:13.716426889+09:00 [INFO][UDR][GIN] | 201 |       127.0.0.1 | POST    | /nudr-dr/v1/subscription-data/imsi-001010000000000/context-data/sdm-subscriptions |
+2023-10-29T11:54:13.716628105+09:00 [INFO][UDM][GIN] | 201 |       127.0.0.1 | POST    | /nudm-sdm/v1/imsi-001010000000000/sdm-subscriptions |
+2023-10-29T11:54:13.717482737+09:00 [INFO][NRF][DISC] Handle NFDiscoveryRequest
+2023-10-29T11:54:13.718758707+09:00 [INFO][NRF][GIN] | 200 |       127.0.0.1 | GET     | /nnrf-disc/v1/nf-instances?preferred-locality=area1&requester-nf-type=AMF&supi=imsi-001010000000000&target-nf-type=PCF |
+2023-10-29T11:54:13.721547301+09:00 [INFO][PCF][AmPol] Handle AM Policy Create Request
+2023-10-29T11:54:13.722169253+09:00 [INFO][NRF][DISC] Handle NFDiscoveryRequest
+2023-10-29T11:54:13.724145429+09:00 [INFO][NRF][GIN] | 200 |       127.0.0.1 | GET     | /nnrf-disc/v1/nf-instances?requester-nf-type=PCF&target-nf-type=UDR |
+2023-10-29T11:54:13.725014655+09:00 [INFO][UDR][DataRepo] Handle PolicyDataUesUeIdAmDataGet
+2023-10-29T11:54:13.725631123+09:00 [INFO][UDR][GIN] | 200 |       127.0.0.1 | GET     | /nudr-dr/v1/policy-data/ues/imsi-001010000000000/am-data |
+2023-10-29T11:54:13.726551253+09:00 [INFO][NRF][DISC] Handle NFDiscoveryRequest
+2023-10-29T11:54:13.727834231+09:00 [INFO][NRF][GIN] | 200 |       127.0.0.1 | GET     | /nnrf-disc/v1/nf-instances?guami=%7B%22plmnId%22%3A%7B%22mcc%22%3A%22001%22%2C%22mnc%22%3A%2201%22%7D%2C%22amfId%22%3A%22cafe00%22%7D&requester-nf-type=PCF&target-nf-type=AMF |
+2023-10-29T11:54:13.729446954+09:00 [INFO][AMF][Comm] Handle AMF Status Change Subscribe Request
+2023-10-29T11:54:13.729633868+09:00 [INFO][AMF][Comm] new AMF Status Subscription[1]
+2023-10-29T11:54:13.729843655+09:00 [INFO][AMF][GIN] | 201 |       127.0.0.1 | POST    | /namf-comm/v1/subscriptions |
+2023-10-29T11:54:13.730541407+09:00 [INFO][PCF][GIN] | 201 |       127.0.0.1 | POST    | /npcf-am-policy-control/v1/policies |
+2023-10-29T11:54:13.731004215+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:imsi-001010000000000] Send Registration Accept
+2023-10-29T11:54:13.731296847+09:00 [INFO][AMF][Ngap][amf_ue_ngap_id:RU:1,AU:1(3GPP)][ran_addr:192.168.0.131:56520] Send Initial Context Setup Request
+2023-10-29T11:54:13.732736437+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:imsi-001010000000000] Start T3550 timer
+2023-10-29T11:54:13.733476780+09:00 [INFO][AMF][Ngap][ran_addr:192.168.0.131:56520] Handle InitialContextSetupResponse
+2023-10-29T11:54:13.733669060+09:00 [INFO][AMF][Ngap][amf_ue_ngap_id:RU:1,AU:1(3GPP)][ran_addr:192.168.0.131:56520] Handle InitialContextSetupResponse (RAN UE NGAP ID: 1)
+2023-10-29T11:54:13.939682883+09:00 [INFO][AMF][Ngap][ran_addr:192.168.0.131:56520] Handle UplinkNASTransport
+2023-10-29T11:54:13.940217578+09:00 [INFO][AMF][Ngap][amf_ue_ngap_id:RU:1,AU:1(3GPP)][ran_addr:192.168.0.131:56520] Handle UplinkNASTransport (RAN UE NGAP ID: 1)
+2023-10-29T11:54:13.940593863+09:00 [INFO][AMF][Gmm] Handle event[Gmm Message], transition from [ContextSetup] to [ContextSetup]
+2023-10-29T11:54:13.941105216+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:imsi-001010000000000] Handle Registration Complete
+2023-10-29T11:54:13.941444518+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:imsi-001010000000000] Stop T3550 timer
+2023-10-29T11:54:13.941788775+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:imsi-001010000000000] Send Configuration Update Command
+2023-10-29T11:54:13.942370760+09:00 [INFO][AMF][Ngap][amf_ue_ngap_id:RU:1,AU:1(3GPP)][ran_addr:192.168.0.131:56520] Send Downlink Nas Transport
+2023-10-29T11:54:13.944112037+09:00 [INFO][AMF][Gmm] Handle event[ContextSetup Success], transition from [ContextSetup] to [Registered]
+2023-10-29T11:54:13.945634266+09:00 [INFO][AMF][Ngap][ran_addr:192.168.0.131:56520] Handle UplinkNASTransport
+2023-10-29T11:54:13.946127877+09:00 [INFO][AMF][Ngap][amf_ue_ngap_id:RU:1,AU:1(3GPP)][ran_addr:192.168.0.131:56520] Handle UplinkNASTransport (RAN UE NGAP ID: 1)
+2023-10-29T11:54:13.946495330+09:00 [INFO][AMF][Gmm] Handle event[Gmm Message], transition from [Registered] to [Registered]
+2023-10-29T11:54:13.946879816+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:imsi-001010000000000] Handle UL NAS Transport
+2023-10-29T11:54:13.947233289+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:imsi-001010000000000] Transport 5GSM Message to SMF
+2023-10-29T11:54:13.947711766+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:imsi-001010000000000] Select SMF [snssai: {Sst:1 Sd:010203}, dnn: internet]
+2023-10-29T11:54:13.949255506+09:00 [INFO][NRF][DISC] Handle NFDiscoveryRequest
+2023-10-29T11:54:13.950325565+09:00 [INFO][NRF][GIN] | 200 |       127.0.0.1 | GET     | /nnrf-disc/v1/nf-instances?requester-nf-type=AMF&target-nf-type=NSSF |
+2023-10-29T11:54:13.951433801+09:00 [INFO][NSSF][NsSel] Handle NSSelectionGet
+2023-10-29T11:54:13.951778469+09:00 [INFO][NSSF][GIN] | 200 |       127.0.0.1 | GET     | /nnssf-nsselection/v1/network-slice-information?nf-id=8c4963b6-179e-4b21-bcbd-bb4c36bcce0a&nf-type=AMF&slice-info-request-for-pdu-session=%7B%22sNssai%22%3A%7B%22sst%22%3A1%2C%22sd%22%3A%22010203%22%7D%2C%22roamingIndication%22%3A%22NON_ROAMING%22%7D |
+2023-10-29T11:54:13.952750269+09:00 [INFO][NRF][DISC] Handle NFDiscoveryRequest
+2023-10-29T11:54:13.954198569+09:00 [INFO][NRF][GIN] | 200 |       127.0.0.1 | GET     | /nnrf-disc/v1/nf-instances?dnn=internet&preferred-locality=area1&requester-nf-type=AMF&service-names=nsmf-pdusession&snssais=%7B%22sst%22%3A1%2C%22sd%22%3A%22010203%22%7D&target-nf-type=SMF&target-plmn-list=%7B%22mcc%22%3A%22001%22%2C%22mnc%22%3A%2201%22%7D |
+2023-10-29T11:54:13.956246811+09:00 [INFO][SMF][PduSess] Receive Create SM Context Request
+2023-10-29T11:54:13.956982246+09:00 [INFO][SMF][PduSess] In HandlePDUSessionSMContextCreate
+2023-10-29T11:54:13.957207450+09:00 [INFO][SMF][CTX] UrrPeriod: 10s
+2023-10-29T11:54:13.957877566+09:00 [INFO][SMF][CTX] UrrThreshold: 1000
+2023-10-29T11:54:13.959344112+09:00 [INFO][NRF][DISC] Handle NFDiscoveryRequest
+2023-10-29T11:54:13.960882066+09:00 [INFO][NRF][GIN] | 200 |       127.0.0.1 | GET     | /nnrf-disc/v1/nf-instances?requester-nf-type=SMF&target-nf-type=UDM |
+2023-10-29T11:54:13.961679119+09:00 [INFO][SMF][PduSess][pdu_session_id:1][supi:imsi-001010000000000] Send NF Discovery Serving UDM Successfully
+2023-10-29T11:54:13.962352860+09:00 [INFO][UDM][SDM] Handle GetSmData
+2023-10-29T11:54:13.963853852+09:00 [INFO][UDM][SDM] getSmDataProcedure: SUPI[imsi-001010000000000] PLMNID[00101] DNN[internet] SNssai[{"sst":1,"sd":"010203"}]
+2023-10-29T11:54:13.964422126+09:00 [INFO][UDR][DataRepo] Handle QuerySmData
+2023-10-29T11:54:13.965305338+09:00 [INFO][UDR][GIN] | 200 |       127.0.0.1 | GET     | /nudr-dr/v1/subscription-data/imsi-001010000000000/00101/provisioned-data/sm-data?single-nssai=%7B%22sst%22%3A1%2C%22sd%22%3A%22010203%22%7D |
+2023-10-29T11:54:13.965815460+09:00 [INFO][UDM][GIN] | 200 |       127.0.0.1 | GET     | /nudm-sdm/v1/imsi-001010000000000/sm-data?dnn=internet&plmn-id=%7B%22mcc%22%3A%22001%22%2C%22mnc%22%3A%2201%22%7D&single-nssai=%7B%22sst%22%3A1%2C%22sd%22%3A%22010203%22%7D |
+2023-10-29T11:54:13.966355076+09:00 [INFO][SMF][GSM] In HandlePDUSessionEstablishmentRequest
+2023-10-29T11:54:13+09:00 [INFO][NAS][Convert] ProtocolOrContainerList:  [0xc000308a60 0xc000308a80]
+2023-10-29T11:54:13.966812812+09:00 [INFO][SMF][GSM] Protocol Configuration Options
+2023-10-29T11:54:13.967003618+09:00 [INFO][SMF][GSM] &{[0xc000308a60 0xc000308a80]}
+2023-10-29T11:54:13.967180271+09:00 [INFO][SMF][GSM] Didn't Implement container type IPAddressAllocationViaNASSignallingUL
+2023-10-29T11:54:13.968016931+09:00 [INFO][NRF][DISC] Handle NFDiscoveryRequest
+2023-10-29T11:54:13.969454374+09:00 [INFO][NRF][GIN] | 200 |       127.0.0.1 | GET     | /nnrf-disc/v1/nf-instances?requester-nf-type=SMF&target-nf-instance-id=8c4963b6-179e-4b21-bcbd-bb4c36bcce0a&target-nf-type=AMF |
+2023-10-29T11:54:13.970013023+09:00 [INFO][SMF][Consumer] SendNFDiscoveryServingAMF ok
+2023-10-29T11:54:13.970396193+09:00 [INFO][SMF][CTX] Allocated UE IP address: 10.60.0.1
+2023-10-29T11:54:13.970554998+09:00 [INFO][SMF][CTX] Selected UPF: UPF
+2023-10-29T11:54:13.970710481+09:00 [INFO][SMF][PduSess][pdu_session_id:1][supi:imsi-001010000000000] Allocated PDUAdress[10.60.0.1]
+2023-10-29T11:54:13.971654541+09:00 [INFO][NRF][DISC] Handle NFDiscoveryRequest
+2023-10-29T11:54:13.972732237+09:00 [INFO][NRF][GIN] | 200 |       127.0.0.1 | GET     | /nnrf-disc/v1/nf-instances?preferred-locality=area1&requester-nf-type=SMF&target-nf-type=PCF |
+2023-10-29T11:54:13.974007780+09:00 [INFO][PCF][SMpolicy] Handle CreateSmPolicy
+2023-10-29T11:54:13.974888617+09:00 [INFO][UDR][DataRepo] Handle PolicyDataUesUeIdSmDataGet
+2023-10-29T11:54:13.976171837+09:00 [INFO][UDR][GIN] | 200 |       127.0.0.1 | GET     | /nudr-dr/v1/policy-data/ues/imsi-001010000000000/sm-data?dnn=internet&snssai=%7B%22sst%22%3A1%2C%22sd%22%3A%22010203%22%7D |
+2023-10-29T11:54:13.978658490+09:00 [INFO][UDR][DataRepo] Handle ApplicationDataInfluenceDataGet
+2023-10-29T11:54:13.979490667+09:00 [INFO][UDR][GIN] | 200 |       127.0.0.1 | GET     | /nudr-dr/v1/application-data/influenceData?dnns=internet&internal-Group-Ids=&snssais=%7B%22sst%22%3A1%2C%22sd%22%3A%22010203%22%7D&supis=imsi-001010000000000 |
+2023-10-29T11:54:13.979781032+09:00 [INFO][PCF][SMpolicy] Matched [0] trafficInfluDatas from UDR
+2023-10-29T11:54:13.980281741+09:00 [INFO][UDR][DataRepo] Handle ApplicationDataInfluenceDataSubsToNotifyPost
+2023-10-29T11:54:13.980496733+09:00 [INFO][UDR][GIN] | 201 |       127.0.0.1 | POST    | /nudr-dr/v1/application-data/influenceData/subs-to-notify |
+2023-10-29T11:54:13.981276761+09:00 [INFO][NRF][DISC] Handle NFDiscoveryRequest
+2023-10-29T11:54:13.982157865+09:00 [INFO][NRF][GIN] | 200 |       127.0.0.1 | GET     | /nnrf-disc/v1/nf-instances?requester-nf-type=PCF&target-nf-type=BSF |
+2023-10-29T11:54:13.985396187+09:00 [INFO][PCF][GIN] | 201 |       127.0.0.1 | POST    | /npcf-smpolicycontrol/v1/sm-policies |
+2023-10-29T11:54:13.986780447+09:00 [INFO][SMF][PduSess][pdu_session_id:1][supi:imsi-001010000000000] Has no pre-config route
+2023-10-29T11:54:13.987087865+09:00 [WARN][SMF][PduSess] Create URR
+2023-10-29T11:54:13.987286409+09:00 [WARN][SMF][PduSess] Create URR
+2023-10-29T11:54:13.987512382+09:00 [INFO][SMF][PduSess][pdu_session_id:1][supi:imsi-001010000000000] Install PCCRule[PccRuleId-1]
+2023-10-29T11:54:13.987807161+09:00 [INFO][SMF][PduSess][pdu_session_id:1][supi:imsi-001010000000000] No srcTcData and tgtTcData. Nothing to do
+2023-10-29T11:54:13.990201455+09:00 [INFO][SMF][GIN] | 201 |       127.0.0.1 | POST    | /nsmf-pdusession/v1/sm-contexts |
+2023-10-29T11:54:13.990619342+09:00 [INFO][SMF][PduSess] Sending PFCP Session Establishment Request
+2023-10-29T11:54:13.991409377+09:00 [INFO][AMF][Gmm][amf_ue_ngap_id:RU:1,AU:1(3GPP)][supi:SUPI:imsi-001010000000000] create smContext[pduSessionID: 1] Success
+2023-10-29T11:54:13.992496774+09:00 [INFO][SMF][PduSess] Received PFCP Session Establishment Accepted Response
+2023-10-29T11:54:13.994608086+09:00 [INFO][AMF][Producer] Handle N1N2 Message Transfer Request
+2023-10-29T11:54:13.994797664+09:00 [INFO][AMF][Ngap][amf_ue_ngap_id:RU:1,AU:1(3GPP)][ran_addr:192.168.0.131:56520] Send PDU Session Resource Setup Request
+2023-10-29T11:54:13.995580869+09:00 [INFO][AMF][GIN] | 200 |       127.0.0.1 | POST    | /namf-comm/v1/ue-contexts/imsi-001010000000000/n1-n2-messages |
+2023-10-29T11:54:14.057501553+09:00 [INFO][AMF][Ngap][ran_addr:192.168.0.131:56520] Handle PDUSessionResourceSetupResponse
+2023-10-29T11:54:14.058208035+09:00 [INFO][AMF][Ngap][amf_ue_ngap_id:RU:1,AU:1(3GPP)][ran_addr:192.168.0.131:56520] Handle PDUSessionResourceSetupResponse (RAN UE NGAP ID: 1)
+2023-10-29T11:54:14.059886057+09:00 [INFO][SMF][PduSess] Receive Update SM Context Request
+2023-10-29T11:54:14.069474214+09:00 [INFO][SMF][PduSess] Received PFCP Session Modification Accepted Response from AN UPF
+2023-10-29T11:54:14.069814534+09:00 [INFO][SMF][GIN] | 200 |       127.0.0.1 | POST    | /nsmf-pdusession/v1/sm-contexts/urn:uuid:d3822249-da43-40ac-943c-af2d5d72e2c4/modify |
+```
+The PDU session establishment log of eUPF is as follows.
+```
+2023/10/29 11:54:14 INF Got Session Establishment Request from: 192.168.14.141.
+2023/10/29 11:54:14 INF 
+Session Establishment Request:
+  CreatePDR ID: 1 
+    Outer Header Removal: 0 
+    FAR ID: 1 
+    QER ID: 2 
+    QER ID: 1 
+    URR ID: 1 
+    Source Interface: 0 
+    TEID: 1 
+    Ipv4: 192.168.13.151 
+    Ipv6: <nil> 
+    UE IPv4 Address: 10.60.0.1 
+  CreatePDR ID: 2 
+    FAR ID: 2 
+    QER ID: 2 
+    QER ID: 1 
+    URR ID: 1 
+    Source Interface: 2 
+    UE IPv4 Address: 10.60.0.1 
+  CreatePDR ID: 3 
+    Outer Header Removal: 0 
+    FAR ID: 3 
+    QER ID: 1 
+    QER ID: 3 
+    URR ID: 1 
+    Source Interface: 0 
+    TEID: 1 
+    Ipv4: 192.168.13.151 
+    Ipv6: <nil> 
+    UE IPv4 Address: 10.60.0.1 
+    SDF Filter: permit out ip from 10.60.0.0/16 to any 
+  CreatePDR ID: 4 
+    FAR ID: 4 
+    QER ID: 1 
+    QER ID: 3 
+    URR ID: 1 
+    Source Interface: 2 
+    UE IPv4 Address: 10.60.0.1 
+    SDF Filter: permit out ip from any to 10.60.0.0/16 
+  CreateFAR ID: 1 
+    Apply Action: [2] 
+    Forwarding Parameters:
+      Network Instance: internet 
+  CreateFAR ID: 2 
+    Apply Action: [2] 
+    Forwarding Parameters:
+  CreateFAR ID: 3 
+    Apply Action: [2] 
+    Forwarding Parameters:
+      Network Instance: internet 
+  CreateFAR ID: 4 
+    Apply Action: [2] 
+    Forwarding Parameters:
+  CreateQER ID: 3 
+    Gate Status DL: 0 
+    Gate Status UL: 0 
+    QFI: 2 
+  CreateQER ID: 2 
+    Gate Status DL: 0 
+    Gate Status UL: 0 
+    QFI: 1 
+  CreateQER ID: 1 
+    Gate Status DL: 0 
+    Gate Status UL: 0 
+    Max Bitrate DL: 1000000 
+    Max Bitrate UL: 1000000 
+    QFI: 0 
+  CreateURR ID: 1 
+    Measurement Method: 2 
+    Volume Threshold: &{Flags:6 TotalVolume:0 UplinkVolume:1000 DownlinkVolume:1000} 
+  CreateURR ID: 2 
+    Measurement Method: 2 
+    Volume Threshold: &{Flags:6 TotalVolume:0 UplinkVolume:1000 DownlinkVolume:1000} 
+
+2023/10/29 11:54:14 INF WARN: No OuterHeaderCreation
+2023/10/29 11:54:14 INF Saving FAR info to session: 1, {Action:2 OuterHeaderCreation:0 Teid:0 RemoteIP:0 LocalIP:2534254784 TransportLevelMarking:0}
+2023/10/29 11:54:14 INF EBPF: Put FAR: internalId=0, qerInfo={Action:2 OuterHeaderCreation:0 Teid:0 RemoteIP:0 LocalIP:2534254784 TransportLevelMarking:0}
+2023/10/29 11:54:14 INF WARN: No OuterHeaderCreation
+2023/10/29 11:54:14 INF Saving FAR info to session: 2, {Action:2 OuterHeaderCreation:0 Teid:0 RemoteIP:0 LocalIP:2534254784 TransportLevelMarking:0}
+2023/10/29 11:54:14 INF EBPF: Put FAR: internalId=1, qerInfo={Action:2 OuterHeaderCreation:0 Teid:0 RemoteIP:0 LocalIP:2534254784 TransportLevelMarking:0}
+2023/10/29 11:54:14 INF WARN: No OuterHeaderCreation
+2023/10/29 11:54:14 INF Saving FAR info to session: 3, {Action:2 OuterHeaderCreation:0 Teid:0 RemoteIP:0 LocalIP:2534254784 TransportLevelMarking:0}
+2023/10/29 11:54:14 INF EBPF: Put FAR: internalId=2, qerInfo={Action:2 OuterHeaderCreation:0 Teid:0 RemoteIP:0 LocalIP:2534254784 TransportLevelMarking:0}
+2023/10/29 11:54:14 INF WARN: No OuterHeaderCreation
+2023/10/29 11:54:14 INF Saving FAR info to session: 4, {Action:2 OuterHeaderCreation:0 Teid:0 RemoteIP:0 LocalIP:2534254784 TransportLevelMarking:0}
+2023/10/29 11:54:14 INF EBPF: Put FAR: internalId=3, qerInfo={Action:2 OuterHeaderCreation:0 Teid:0 RemoteIP:0 LocalIP:2534254784 TransportLevelMarking:0}
+2023/10/29 11:54:14 INF Saving QER info to session: 3, {GateStatusUL:0 GateStatusDL:0 Qfi:2 MaxBitrateUL:0 MaxBitrateDL:0 StartUL:0 StartDL:0}
+2023/10/29 11:54:14 INF EBPF: Put QER: internalId=0, qerInfo={GateStatusUL:0 GateStatusDL:0 Qfi:2 MaxBitrateUL:0 MaxBitrateDL:0 StartUL:0 StartDL:0}
+2023/10/29 11:54:14 INF Saving QER info to session: 2, {GateStatusUL:0 GateStatusDL:0 Qfi:1 MaxBitrateUL:0 MaxBitrateDL:0 StartUL:0 StartDL:0}
+2023/10/29 11:54:14 INF EBPF: Put QER: internalId=1, qerInfo={GateStatusUL:0 GateStatusDL:0 Qfi:1 MaxBitrateUL:0 MaxBitrateDL:0 StartUL:0 StartDL:0}
+2023/10/29 11:54:14 INF Saving QER info to session: 1, {GateStatusUL:0 GateStatusDL:0 Qfi:0 MaxBitrateUL:1000000000 MaxBitrateDL:1000000000 StartUL:0 StartDL:0}
+2023/10/29 11:54:14 INF EBPF: Put QER: internalId=2, qerInfo={GateStatusUL:0 GateStatusDL:0 Qfi:0 MaxBitrateUL:1000000000 MaxBitrateDL:1000000000 StartUL:0 StartDL:0}
+2023/10/29 11:54:14 INF EBPF: Put PDR Uplink: teid=1, pdrInfo={OuterHeaderRemoval:0 FarId:0 QerId:1 SdfFilter:<nil>}
+2023/10/29 11:54:14 INF EBPF: Put PDR Downlink: ipv4=10.60.0.1, pdrInfo={OuterHeaderRemoval:0 FarId:1 QerId:1 SdfFilter:<nil>}
+2023/10/29 11:54:14 INF EBPF: Put PDR Downlink: ipv4=10.60.0.1, pdrInfo={OuterHeaderRemoval:0 FarId:3 QerId:2 SdfFilter:{Protocol:1 SrcAddress:{Type:0 Ip:<nil> Mask:<nil>} SrcPortRange:{LowerBound:0 UpperBound:65535} DstAddress:{Type:1 Ip:10.60.0.0 Mask:ffff0000} DstPortRange:{LowerBound:0 UpperBound:65535}}}
+2023/10/29 11:54:14 INF Session Establishment Request from 192.168.14.141 accepted.
+2023/10/29 11:54:14 INF Received 305 bytes from 192.168.14.141:8805
+2023/10/29 11:54:14 INF Handling PFCP message from 192.168.14.141:8805
+2023/10/29 11:54:14 INF Got Session Modification Request from: 192.168.14.141. 
+
+2023/10/29 11:54:14 INF Finding association for 192.168.14.141
+2023/10/29 11:54:14 INF Finding session 2
+2023/10/29 11:54:14 INF 
+Session Modification Request:
+  UpdatePDR ID: 2 
+    FAR ID: 2 
+    Source Interface: 2 
+    UE IPv4 Address: 10.60.0.1 
+  UpdatePDR ID: 4 
+    FAR ID: 4 
+    Source Interface: 2 
+    UE IPv4 Address: 10.60.0.1 
+    SDF Filter: permit out ip from any to 10.60.0.0/16 
+  UpdateFAR ID: 2 
+    Apply Action: [2] 
+    Update forwarding Parameters:
+      Network Instance: internet 
+      Outer Header Creation: &{OuterHeaderCreationDescription:256 TEID:1 IPv4Address:192.168.13.131 IPv6Address:<nil> PortNumber:0 CTag:0 STag:0} 
+  UpdateFAR ID: 4 
+    Apply Action: [2] 
+    Update forwarding Parameters:
+      Network Instance: internet 
+      Outer Header Creation: &{OuterHeaderCreationDescription:256 TEID:1 IPv4Address:192.168.13.131 IPv6Address:<nil> PortNumber:0 CTag:0 STag:0} 
+
+2023/10/29 11:54:14 INF Updating FAR info: 2, {FarInfo:{Action:2 OuterHeaderCreation:1 Teid:1 RemoteIP:2198710464 LocalIP:2534254784 TransportLevelMarking:0} GlobalId:1}
+2023/10/29 11:54:14 INF EBPF: Update FAR: internalId=1, farInfo={Action:2 OuterHeaderCreation:1 Teid:1 RemoteIP:2198710464 LocalIP:2534254784 TransportLevelMarking:0}
+2023/10/29 11:54:14 INF Updating FAR info: 4, {FarInfo:{Action:2 OuterHeaderCreation:1 Teid:1 RemoteIP:2198710464 LocalIP:2534254784 TransportLevelMarking:0} GlobalId:3}
+2023/10/29 11:54:14 INF EBPF: Update FAR: internalId=3, farInfo={Action:2 OuterHeaderCreation:1 Teid:1 RemoteIP:2198710464 LocalIP:2534254784 TransportLevelMarking:0}
+2023/10/29 11:54:14 INF Both F-TEID IE and UE IP Address IE are missing
+2023/10/29 11:54:14 INF Both F-TEID IE and UE IP Address IE are missing
+```
+Looking at the console log of the `nr-ue` command, UE has been assigned the IP address `10.60.0.1` from free5GC 5GC.
+```
+[2023-10-29 11:54:14.089] [app] [info] Connection setup for PDU session[1] is successful, TUN interface[uesimtun0, 10.60.0.1] is up.
+```
+Just in case, make sure it matches the IP address of the UE's TUNnel interface.
+```
+# ip addr show
+...
+15: uesimtun0: <POINTOPOINT,PROMISC,NOTRAILERS,UP,LOWER_UP> mtu 1400 qdisc fq_codel state UNKNOWN group default qlen 500
+    link/none 
+    inet 10.60.0.1/32 scope global uesimtun0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::af3a:d668:bb60:4e62/64 scope link stable-privacy 
+       valid_lft forever preferred_lft forever
+...
+```
+
+<a id="ping"></a>
+
+## Ping google.com
+
+Specify the UE's TUNnel interface and try ping.
+
+Please refer to the following for usage of TUNnel interface.
+
+https://github.com/aligungr/UERANSIM/wiki/Usage
+
+
+<a id="ping_1"></a>
+
+### Case for going through DN 10.60.0.0/16
+
+Run `tcpdump` on VM-DN and check that the packet goes through N6 (enp0s9).
+- `ping google.com` on VM3 (UE)
+```
+# ping google.com -I uesimtun0 -n
+PING google.com (142.250.196.142) from 10.60.0.1 uesimtun0: 56(84) bytes of data.
+64 bytes from 142.250.196.142: icmp_seq=1 ttl=61 time=30.8 ms
+64 bytes from 142.250.196.142: icmp_seq=2 ttl=61 time=24.3 ms
+64 bytes from 142.250.196.142: icmp_seq=3 ttl=61 time=22.4 ms
+```
+- Run `tcpdump` on VM-DN
+```
+# tcpdump -i enp0s9 -n
+tcpdump: verbose output suppressed, use -v[v]... for full protocol decode
+listening on enp0s9, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+12:09:29.524348 IP 10.60.0.1 > 142.250.196.142: ICMP echo request, id 16, seq 1, length 64
+12:09:29.552900 IP 142.250.196.142 > 10.60.0.1: ICMP echo reply, id 16, seq 1, length 64
+12:09:30.525390 IP 10.60.0.1 > 142.250.196.142: ICMP echo request, id 16, seq 2, length 64
+12:09:30.547254 IP 142.250.196.142 > 10.60.0.1: ICMP echo reply, id 16, seq 2, length 64
+12:09:31.526357 IP 10.60.0.1 > 142.250.196.142: ICMP echo request, id 16, seq 3, length 64
+12:09:31.546557 IP 142.250.196.142 > 10.60.0.1: ICMP echo reply, id 16, seq 3, length 64
+```
+- See `/sys/kernel/debug/tracing/trace_pipe` on VM-UP
+```
+# cat /sys/kernel/debug/tracing/trace_pipe
+...
+          <idle>-0       [000] d.s31 30766.590570: bpf_trace_printk: upf: gtp-u received
+          <idle>-0       [000] dNs31 30766.590603: bpf_trace_printk: upf: far:0 action:2 outer_header_creation:0
+          <idle>-0       [000] dNs31 30766.590605: bpf_trace_printk: upf: qer:0 gate_status:0 mbr:0
+          <idle>-0       [000] dNs31 30766.590607: bpf_trace_printk: upf: session for teid:1 far:0 outer_header_removal:0
+          <idle>-0       [000] dNs31 30766.590620: bpf_trace_printk: upf: bpf_fib_lookup 10.60.0.1 -> 142.250.196.142: nexthop: 192.168.16.152
+          <idle>-0       [000] d.s31 30766.609376: bpf_trace_printk: SDF: filter protocol: 1
+          <idle>-0       [000] dNs31 30766.609403: bpf_trace_printk: SDF: filter source ip: 0.0.0.0, destination ip: 10.60.0.0
+          <idle>-0       [000] dNs31 30766.609405: bpf_trace_printk: SDF: filter source ip mask: 0.0.0.0, destination ip mask: 255.255.0.0
+          <idle>-0       [000] dNs31 30766.609407: bpf_trace_printk: SDF: filter source port lower bound: 0, source port upper bound: 65535
+          <idle>-0       [000] dNs31 30766.609419: bpf_trace_printk: SDF: filter destination port lower bound: 0, destination port upper bound: 65535
+          <idle>-0       [000] dNs31 30766.609420: bpf_trace_printk: SDF: packet protocol: 0
+          <idle>-0       [000] dNs31 30766.609422: bpf_trace_printk: SDF: packet source ip: 142.250.196.142, destination ip: 10.60.0.1
+          <idle>-0       [000] dNs31 30766.609429: bpf_trace_printk: SDF: packet source port: 0, destination port: 0
+          <idle>-0       [000] dNs31 30766.609431: bpf_trace_printk: Packet with source ip: 142.250.196.142, destination ip: 10.60.0.1 matches SDF filter
+          <idle>-0       [000] dNs31 30766.609433: bpf_trace_printk: Packet with source ip:142.250.196.142 and destination ip:10.60.0.1 matches SDF filter
+          <idle>-0       [000] dNs31 30766.609435: bpf_trace_printk: upf: downlink session for ip:10.60.0.1  far:3 action:2
+          <idle>-0       [000] dNs31 30766.609437: bpf_trace_printk: upf: qer:1 gate_status:0 mbr:1000000000
+          <idle>-0       [000] dNs31 30766.609439: bpf_trace_printk: upf: use mapping 10.60.0.1 -> TEID:1
+          <idle>-0       [000] dNs31 30766.609441: bpf_trace_printk: upf: send gtp pdu 192.168.13.151 -> 192.168.13.131
+          <idle>-0       [000] dNs31 30766.609450: bpf_trace_printk: upf: bpf_fib_lookup 192.168.13.151 -> 192.168.13.131: nexthop: 192.168.13.131
+...
+```
+You could specify the IP address assigned to the TUNnel interface to run almost any applications as in the following example using `nr-binder` tool.
+
+- Run `curl google.com` on VM3 (UE)
+```
+# sh nr-binder 10.60.0.1 curl google.com
+<HTML><HEAD><meta http-equiv="content-type" content="text/html;charset=utf-8">
+<TITLE>301 Moved</TITLE></HEAD><BODY>
+<H1>301 Moved</H1>
+The document has moved
+<A HREF="http://www.google.com/">here</A>.
+</BODY></HTML>
+```
+- Run `tcpdump` on VM-DN
+```
+12:11:25.399052 IP 10.60.0.1.36625 > 142.250.196.142.80: Flags [S], seq 2550783592, win 65280, options [mss 1360,sackOK,TS val 1706742698 ecr 0,nop,wscale 7], length 0
+12:11:25.423930 IP 142.250.196.142.80 > 10.60.0.1.36625: Flags [S.], seq 4864001, ack 2550783593, win 65535, options [mss 1460], length 0
+12:11:25.425924 IP 10.60.0.1.36625 > 142.250.196.142.80: Flags [.], ack 1, win 65280, length 0
+12:11:25.426204 IP 10.60.0.1.36625 > 142.250.196.142.80: Flags [P.], seq 1:75, ack 1, win 65280, length 74: HTTP: GET / HTTP/1.1
+12:11:25.426344 IP 142.250.196.142.80 > 10.60.0.1.36625: Flags [.], ack 75, win 65535, length 0
+12:11:25.485603 IP 142.250.196.142.80 > 10.60.0.1.36625: Flags [P.], seq 1:774, ack 75, win 65535, length 773: HTTP: HTTP/1.1 301 Moved Permanently
+12:11:25.488554 IP 10.60.0.1.36625 > 142.250.196.142.80: Flags [.], ack 774, win 64507, length 0
+12:11:25.489956 IP 10.60.0.1.36625 > 142.250.196.142.80: Flags [F.], seq 75, ack 774, win 64507, length 0
+12:11:25.490156 IP 142.250.196.142.80 > 10.60.0.1.36625: Flags [.], ack 76, win 65535, length 0
+12:11:25.507775 IP 142.250.196.142.80 > 10.60.0.1.36625: Flags [F.], seq 774, ack 76, win 65535, length 0
+12:11:25.509531 IP 10.60.0.1.36625 > 142.250.196.142.80: Flags [.], ack 775, win 64507, length 0
+```
+Please note that the `ping` tool does not work with `nr-binder`. Please refer to [here](https://github.com/aligungr/UERANSIM/issues/186#issuecomment-729534464) for the reason.
+You could now connect to the DN and send any packets on the network using eUPF.
+
+---
+
+Now you could work free5GC with eUPF.
+I would like to thank the excellent developers and all the contributors of free5GC, eUPF and UERANSIM.
+
+<a id="changelog"></a>
+
+## Changelog (summary)
+
+- [2023.10.29] Initial release.
