@@ -1002,6 +1002,6 @@ I would like to thank the excellent developers and all the contributors of free5
 
 ## Changelog (summary)
 
-- [2023.12.04] Updated as eUPF FTUP feature has been merged into main branch.
+- [2023.12.04] Updated as eUPF FTUP feature has been merged into `main` branch.
 - [2023.11.26] Updated to eUPF `120-upf-ftup-fteid` branch that supports FTUP. Although free5GC does not support FTUP in PDU Session Establishment, I confirmed its operation on `120-upf-ftup-fteid` branch in order to compare it with the logs of Open5GS which supports FTUP.
 - [2023.10.29] Initial release.
