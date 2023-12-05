@@ -51,7 +51,7 @@ The built simulation environment is as follows.
 
 The 5GC / eBPF/XDP UPF / UE / RAN used are as follows.
 - 5GC - free5GC v3.3.0 (2023.12.04) - https://github.com/free5gc/free5gc
-- eBPF/XDP UPF - eUPF v0.5.2 (2023.12.04) - https://github.com/edgecomllc/eupf
+- eBPF/XDP UPF - eUPF v0.6.0 (2023.12.04) - https://github.com/edgecomllc/eupf
 - UE / RAN - UERANSIM v3.2.6 (2023.11.27) - https://github.com/aligungr/UERANSIM
 
 Each VMs are as follows.  
@@ -111,7 +111,7 @@ The DN is as follows.
 
 Please refer to the following for building free5GC, eUPF and UERANSIM respectively.
 - free5GC v3.3.0 (2023.12.04) - https://free5gc.org/guide/
-- eUPF eUPF v0.5.2 (2023.12.04) - https://github.com/s5uishida/install_eupf
+- eUPF eUPF v0.6.0 (2023.12.04) - https://github.com/s5uishida/install_eupf
 - UERANSIM v3.2.6 (2023.11.27) - https://github.com/aligungr/UERANSIM/wiki/Installation
 
 <a id="changes_cp"></a>
@@ -372,7 +372,7 @@ See [this1](https://github.com/s5uishida/install_eupf#setup-eupf-on-vm-up) and [
 
 Please refer to the following for building free5GC, eUPF and UERANSIM respectively.
 - free5GC v3.3.0 (2023.12.04) - https://free5gc.org/guide/
-- eUPF v0.5.2 (2023.12.04) - https://github.com/s5uishida/install_eupf
+- eUPF v0.6.0 (2023.12.04) - https://github.com/s5uishida/install_eupf
 - UERANSIM v3.2.6 (2023.11.27) - https://github.com/aligungr/UERANSIM/wiki/Installation
 
 Install MongoDB on free5GC 5GC C-Plane machine.
@@ -1002,6 +1002,7 @@ I would like to thank the excellent developers and all the contributors of free5
 
 ## Changelog (summary)
 
+- [2023.12.05] The eUPF version confirmed to work in the changelog on 2023.12.04 has been tagged as `v0.6.0`.
 - [2023.12.04] Updated as eUPF FTUP feature has been merged into `main` branch.
 - [2023.11.26] Updated to eUPF `120-upf-ftup-fteid` branch that supports FTUP. Although free5GC does not support FTUP in PDU Session Establishment, I confirmed its operation on `120-upf-ftup-fteid` branch in order to compare it with the logs of Open5GS which supports FTUP.
 - [2023.10.29] Initial release.
