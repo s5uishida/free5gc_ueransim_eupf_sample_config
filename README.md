@@ -221,7 +221,7 @@ For the sake of simplicity, This time, only DNN will be changed. S-NSSAI of all 
 - `free5gc/config/smfcfg.yaml`
 ```diff
 --- smfcfg.yaml.orig    2024-03-24 17:44:26.586613478 +0900
-+++ smfcfg.yaml 2024-03-24 17:56:35.702302968 +0900
++++ smfcfg.yaml 2024-03-28 21:23:47.750479543 +0900
 @@ -34,22 +34,22 @@
              ipv4: 8.8.8.8
              ipv6: 2001:4860:4860::8888
@@ -261,7 +261,7 @@ For the sake of simplicity, This time, only DNN will be changed. S-NSSAI of all 
              networkInstances:  # Data Network Name (DNN)
                - internet
      links: # the topology graph of userplane, A and B represent the two nodes of each link
-@@ -90,8 +90,10 @@
+@@ -90,8 +90,9 @@
      maxRetryTimes: 3 # the max number of retransmission
    nrfUri: http://127.0.0.10:8000 # a valid URI of NRF
    nrfCertPem: cert/nrf.pem # NRF Certificate
@@ -270,12 +270,10 @@ For the sake of simplicity, This time, only DNN will be changed. S-NSSAI of all 
 +  urrPeriod: 10 # default usage report period in seconds
 +  urrThreshold: 1000 # default usage report threshold in bytes
 +  ulcl: false
-+  nwInstFqdnEncoding: true
  
  logger: # log output setting
    enable: true # true or false
 ```
-
 
 <a id="changes_up"></a>
 
