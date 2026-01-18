@@ -83,7 +83,6 @@ The network interfaces of each VM are as follows.
 | VM3 | ens18 | VirtIO | vmbr1 | 10.0.0.132/24 | (NAPT NW) | -- |
 | | ens19 | VirtIO | mgbr0 | 192.168.0.132/24 | (Mgmt NW) | -- |
 
-
 Linux Bridges of Proxmox VE are as follows.
 | Linux Bridge | Network CIDR | Interface |
 | --- | --- | --- |
