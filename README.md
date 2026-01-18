@@ -461,7 +461,6 @@ Please refer to the following for usage of UERANSIM.
 
 https://github.com/aligungr/UERANSIM/wiki/Usage
 
-
 <a id="start_gnb"></a>
 
 #### Start gNB
